@@ -5,6 +5,7 @@ import keyboard
 import time
 import shutil
 from PIL import Image, ImageDraw, ImageFont
+import msvcrt
 
 # ASCII characters from darkest to lightest
 ASCII_CHARS = " .:-=+*#%@"
@@ -154,7 +155,10 @@ def main():
     finally:
         # When everything done, release the capture
         cap.release()
-        cv2.destroyAllWindows()
+        # Clear any buffered key presses
+        while msvcrt.kbhit():
+            msvcrt.getch()
+        
 
 if __name__ == "__main__":
     main()
