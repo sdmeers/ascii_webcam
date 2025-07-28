@@ -1,118 +1,101 @@
 import cv2
-import os
-import shutil
 import numpy as np
+import os
+import keyboard
+import time
 
-########################################################################
-# SETTINGS #
-SHOW_REAL_VIDEO = True   # Set this to True to get real camera video from cv2
-USE_EXTENDED_CHARS = True  # Use extended character set for better quality
-ASPECT_RATIO_CORRECTION = 1.0  # Adjust for character aspect ratio (height/width)
-########################################################################
+# ASCII characters from darkest to lightest
+ASCII_CHARS = "@%#*+=-:. "
 
-def convert_row_to_ascii(row, extended=False):
-    if extended:
-        # Extended 32-character set for much better detail
-        ORDER = (' ', '`', '.', "'", ',', ':', ';', '^', '"', '~', '-', '_', 
-                '+', '=', '<', '>', 'i', '!', 'l', 'I', '?', '/', '\\', '|',
-                '(', ')', '1', '{', '}', '[', ']', 'r', 'c', 'v', 'u', 'n',
-                'x', 'z', 'j', 'f', 't', 'L', 'C', 'J', 'U', 'Y', 'X', 'Z',
-                'O', '0', 'Q', 'o', 'a', 'h', 'k', 'b', 'd', 'q', 'p', 'w',
-                'm', 'W', 'B', '8', '&', '%', '$', '#', '@')
-        # 64 characters total
-    else:
-        # Original 17-character set
-        ORDER = (' ', '.', "'", ',', ':', ';', 'c', 'l',
-                 'x', 'o', 'k', 'X', 'd', 'O', '0', 'K', 'N')
-    
-    max_index = len(ORDER) - 1
-    return tuple(ORDER[min(int(x * max_index / 255), max_index)] for x in row)
+def resize_frame(frame, new_width=100):
+    """
+    Resizes a frame to a new width while maintaining the aspect ratio.
+    """
+    (old_height, old_width) = frame.shape
+    aspect_ratio = old_height / float(old_width)
+    new_height = int(aspect_ratio * new_width * 0.55) # 0.55 is a correction factor for character aspect ratio
+    resized_frame = cv2.resize(frame, (new_width, new_height))
+    return resized_frame
 
-def convert_to_ascii(input_grays, extended=False):
-    return tuple(convert_row_to_ascii(row, extended) for row in input_grays)
+def grayscale(frame):
+    """
+    Converts a frame to grayscale.
+    """
+    return cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
-def print_array(input_ascii_array):
-    # Use ANSI escape codes for better clearing
-    print('\033[2J\033[H', end='')  # Clear screen and move cursor to top
-    print('\n'.join((''.join(row) for row in input_ascii_array)), end='', flush=True)
+def adapt_brightness(frame):
+    """
+    Adapts the brightness of the frame using histogram equalization.
+    This helps in making the subject clearer in varying light conditions.
+    """
+    return cv2.equalizeHist(frame)
 
-def apply_contrast_enhancement(image, alpha=1.2, beta=10):
-    """Apply contrast and brightness adjustment"""
-    return cv2.convertScaleAbs(image, alpha=alpha, beta=beta)
-
-def apply_histogram_equalization(image):
-    """Apply histogram equalization for better contrast"""
-    return cv2.equalizeHist(image)
+def frame_to_ascii(frame, ascii_chars):
+    """
+    Converts a grayscale frame to an ASCII string.
+    """
+    pixels = frame.flatten()
+    # Map each pixel intensity (0-255) to an ASCII character index (0-9)
+    # The formula `pixel * len(ascii_chars) // 256` correctly scales the range.
+    ascii_str = "".join([ascii_chars[pixel * len(ascii_chars) // 256] for pixel in pixels])
+    return ascii_str
 
 def main():
+    """
+    Main function to capture video from webcam and display it as ASCII art.
+    """
+    # Attempt to open the default webcam
     cap = cv2.VideoCapture(0)
-    
-    # Set camera properties for better quality
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
-    cap.set(cv2.CAP_PROP_FPS, 30)
-    
     if not cap.isOpened():
-        print("Error: Could not open camera")
+        print("Error: Could not open webcam.")
         return
-    
-    print("ASCII Webcam started. Press 'q' or 'ESC' to quit.")
-    
+
     try:
         while True:
-            # Check for key press (non-blocking)
-            key = cv2.waitKey(1) & 0xFF
-            if key == ord('q') or key == 27:  # 'q' or ESC key
-                break
-            
-            # Get screensize for reduction
-            screen_size = shutil.get_terminal_size((80, 24))
-            screen_width, screen_height = screen_size.columns, screen_size.lines
-            
-            # Adjust for aspect ratio - characters are taller than wide
-            adjusted_height = int(screen_height / ASPECT_RATIO_CORRECTION)
-            
-            # Get image data
+            # Capture frame-by-frame
             ret, frame = cap.read()
             if not ret:
-                print("Error: Failed to capture frame")
+                print("Error: Can't receive frame (stream end?). Exiting ...")
+                break
+
+            # --- Frame Processing ---
+            # 1. Convert to grayscale
+            gray_frame = grayscale(frame)
+
+            # 2. Adapt brightness
+            bright_frame = adapt_brightness(gray_frame)
+
+            # 3. Resize for terminal display
+            resized_frame = resize_frame(bright_frame)
+
+            # 4. Convert to ASCII
+            (height, width) = resized_frame.shape
+            ascii_str = frame_to_ascii(resized_frame, ASCII_CHARS)
+
+            # --- Displaying the ASCII art ---
+            # Clear the console
+            os.system('cls' if os.name == 'nt' else 'clear')
+
+            # Print ASCII string line by line
+            for i in range(0, len(ascii_str), width):
+                print(ascii_str[i:i+width])
+
+            # --- Exit Conditions ---
+            # Check for 'q' or 'esc' key press
+            if keyboard.is_pressed('q') or keyboard.is_pressed('esc'):
+                print("Exiting...")
                 break
             
-            # Convert to grayscale
-            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-            
-            # Apply image enhancements
-            enhanced = apply_contrast_enhancement(gray)
-            enhanced = apply_histogram_equalization(enhanced)
-            
-            # Apply Gaussian blur to reduce noise
-            enhanced = cv2.GaussianBlur(enhanced, (3, 3), 0)
-            
-            # Resize with better interpolation
-            reduced = cv2.resize(enhanced, (screen_width, adjusted_height), 
-                               interpolation=cv2.INTER_AREA)
-            
-            # Convert to ASCII
-            converted = convert_to_ascii(reduced, USE_EXTENDED_CHARS)
-            print_array(converted)
-            
-            # Display the real video if enabled
-            if SHOW_REAL_VIDEO:
-                cv2.imshow('Enhanced Frame', enhanced)
-                cv2.imshow('Original Frame', gray)
-                
-                # Check for window close button
-                if cv2.getWindowProperty('Enhanced Frame', cv2.WND_PROP_VISIBLE) < 1:
-                    break
-    
+            # A short delay to control frame rate
+            time.sleep(0.05)
+
+
     except KeyboardInterrupt:
-        print("\nInterrupted by user")
-    
+        print("\nExiting due to Ctrl+C...")
     finally:
-        # Cleanup
+        # When everything done, release the capture
         cap.release()
         cv2.destroyAllWindows()
-        print("\nCamera released and windows closed.")
 
 if __name__ == "__main__":
     main()
