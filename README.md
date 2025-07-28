@@ -19,7 +19,7 @@ Here's an example of the ASCII webcam in action:
 
 1.  **Clone the repository:**
     ```bash
-    git clone https://github.com/your-username/ascii_webcam.git
+    git clone https://github.com/sdmeers/ascii_webcam.git
     cd ascii_webcam
     ```
 
@@ -48,11 +48,6 @@ python ascii_webcam.py
 -   `q` or `Esc`: Exit the application.
 -   `d`: Toggle brightness inversion.
 -   `s`: Take a screenshot and save it as a `.png` file in the `screenshots/` directory.
-
-## Troubleshooting
-
--   **`cv2.error: (-2:Unspecified error) The function is not implemented.` on exit:** This error is harmless and occurs because `cv2.destroyAllWindows()` is called without an active GUI window. It has been addressed in the latest version of the script.
--   **Key presses appearing on command line after exit:** This is a Windows-specific issue where key presses are buffered. The script includes a fix to clear the buffer on exit.
 
 ## Future Improvements
 
